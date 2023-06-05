@@ -1,9 +1,17 @@
 import type { Warning } from './endosulfan';
 
+export type ParseResult = {
+  html: string,
+  warnings: Warning[]
+}
+
 //some minor differences with markdown spec?
-export function parse_md_to_html(md: string): string {
+export function parse_md_to_html_with_warnings(md: string): ParseResult {
   let html: string = "";
   let html_line: string = "";
+  let warnings: Warning[] = [];
+
+  let line_number: number = 1;
 
   //markdown parsing vars
   let is_first_line: boolean = true;
@@ -19,13 +27,18 @@ export function parse_md_to_html(md: string): string {
   let was_image: boolean = false;
   let image_alt: string | undefined = undefined;
   let image_src: string | undefined = undefined;
+  let was_link: boolean = false;
+  let link_content: string | undefined = undefined;
+  let link_href: string | undefined = undefined;
   let in_code: boolean = false;
+  let in_code_block: boolean = false;
+  let first_line_code_block: boolean = false;
+  let code_block_lang: string | undefined = undefined;
 
   //loop through characters
   let chars: string = md;
   for (let i=0; i < chars.length; i++) {
     let char: string = chars[i];
-    //console.log(char, asterisk_num, in_asterisk);
     //sanitize input
     if (char === "<") {
       char = "&lt;";
@@ -43,7 +56,7 @@ export function parse_md_to_html(md: string): string {
     if (char === "\\" && chars[i+1] !== "\n") {
       backslashed = true;
       if (i === 0 || chars[i-1] === "\n") {
-        html_line += "<p>";
+        html_line = "<p>"+html_line;
       }
       continue;
     }
@@ -53,6 +66,29 @@ export function parse_md_to_html(md: string): string {
         //it can only be the first line once :)
         is_first_line = false;
       }
+      //if first line of code block, create the code block div
+      if (first_line_code_block) {
+        code_block_lang = code_block_lang!.toLowerCase().trim();
+        let known_langs: string[] = ["python", "py", "rust", "rs", "javascript", "js", "typescript", "ts", "java", "c", "cpp", "csharp", "html", "css", "markdown", "md", "brainfuck", "php", "bash", "perl", "sql", "ruby", "basic", "assembly", "asm", "wasm", "r", "go", "swift"]
+        if (!known_langs.includes(code_block_lang)) {
+          warnings.push({
+            type: "unknown-language",
+            message: `Unknown language '${code_block_lang}' for code block`,
+            line_number,
+          });
+        }
+        html_line = `<div class="code-block code-${code_block_lang}">`;
+        code_block_lang = undefined;
+        first_line_code_block = false;
+      }
+      if (in_code_block && char === "\n") {
+        html_line += "\n";
+      }
+      //close code block div
+      if (in_code_block && i === chars.length-1) {
+        in_code_block = false;
+        html_line = "</div>";
+      }
       //if image was never completed
       if (image_alt !== undefined) {
         if (!html_line.startsWith("<p>")) {
@@ -61,15 +97,50 @@ export function parse_md_to_html(md: string): string {
         html_line += "!["+image_alt;
         if (image_src !== undefined) {
           html_line += "]("+image_src;
+          warnings.push({
+            type: "image-incomplete",
+            message: "Image incomplete, missing `)`",
+            line_number,
+          });
+        } else {
+          warnings.push({
+            type: "image-incomplete",
+            message: "Image incomplete, missing `]` or `(`",
+            line_number,
+          });
         }
         image_alt = undefined;
         image_src = undefined;
+      }
+      //if link was never completed
+      if (link_content !== undefined) {
+        if (!html_line.startsWith("<p>")) {
+          html_line = "<p>"+html_line;
+        }
+        html_line += "["+link_content;
+        if (link_href !== undefined) {
+          html_line += "]("+link_href;
+          warnings.push({
+            type: "link-incomplete",
+            message: "Link incomplete, missing `)`",
+            line_number,
+          });
+        } else {
+          warnings.push({
+            type: "link-incomplete",
+            message: "Link incomplete, missing `]` or `(`",
+            line_number,
+          });
+        }
+        link_content = undefined;
+        link_href = undefined;
       }
       //if last character
       if (i === chars.length-1 && char !== "\n") {
         let add_char: boolean = true;
         //if in code
         if (in_code && char === "`") {
+          in_code = false;
           html_line += "</code>";
           add_char = false;
         }
@@ -78,7 +149,7 @@ export function parse_md_to_html(md: string): string {
           add_char = false;
         }
         //handle image just ending
-        if (was_image && char === ")") {
+        if ((was_image || was_link) && char === ")") {
           add_char = false;
         }
         //if previous character is also newline, there hasn't been opportunity to add a <p>, so add it!
@@ -109,7 +180,8 @@ export function parse_md_to_html(md: string): string {
       }
       html_line = "";
       horizontal_num = 0;
-      if (horizontal_rule || was_image) {
+      line_number++;
+      if (horizontal_rule || was_image || was_link) {
         if (i !== chars.length - 1 && html[html.length-1] !== "\n") {
           //only add new line if there isn't already one, and isn't last character
           html += "\n";
@@ -119,6 +191,7 @@ export function parse_md_to_html(md: string): string {
         }
         horizontal_rule = false;
         was_image = false;
+        was_link = false;
         continue;
       }
       //ending a header, line break not needed
@@ -137,6 +210,54 @@ export function parse_md_to_html(md: string): string {
         //remove newline
         html = html.trim();
       }
+      continue;
+    }
+    //code blocks
+    if (char === "`" && chars[i+1] !== "`" && (chars.slice(i-3, i) === "\n``" || (i === 2 && chars.slice(i-2, i) === "``"))) {
+      if (!in_code_block) {
+        //make sure there is ``` further on, that is not backslashed
+        let skip_next: boolean = false;
+        let end_found: boolean = false;
+        for (let ii=1; ii < chars.length-i; ii++) {
+          let adjusted_index: number = i+ii;
+          if (skip_next) {
+            skip_next = false;
+            continue;
+          }
+          if (chars[adjusted_index] === "\\") {
+            skip_next = true;
+          } else if (chars.slice(adjusted_index-3, adjusted_index+1) === "\n```" && (adjusted_index === chars.length-1 || chars[adjusted_index+1] === "\n")) {
+            end_found = true;
+            break;
+          }
+        }
+        if (end_found) {
+          in_code = false;
+          in_code_block = true;
+          first_line_code_block = true;
+          code_block_lang = "";
+          //at this point html_line would have two backticks (probably a <code></code> actually) in it
+          html_line = "";
+          continue;
+        } else {
+          warnings.push({
+            type: "code-block-not-closed",
+            message: "Code block not closed, may be missing closing backticks?",
+            line_number,
+          });
+        }
+      } else if (in_code_block && chars[i+1] === "\n") { // || i === chars.length-1 will be handled by a different part
+        in_code = false;
+        in_code_block = false;
+        html_line = "</div>\n";
+        continue;
+      }
+    } else if (first_line_code_block) {
+      code_block_lang += char;
+      continue;
+    } else if (in_code_block) {
+      //do not render markdown inside code blocks... obviously
+      html_line += char;
       continue;
     }
     //handle code
@@ -162,9 +283,20 @@ export function parse_md_to_html(md: string): string {
       if (end_found) {
         in_code = true;
         html_line += "<code>";
+        //we have to repeat some code from later on and add a <p>
+        if (i === 0 || chars[i-1] === "\n") {
+          html_line = "<p>"+html_line;
+        }
         continue;
+      } else {
+        warnings.push({
+          type: "code-snippet-not-closed",
+          message: "Code snippet not closed, may be missing closing backtick?",
+          line_number,
+        });
       }
     } else if (char === "`" && in_code) {
+      in_code = false;
       html_line += "</code>";
       continue;
     } else if (in_code) {
@@ -179,12 +311,18 @@ export function parse_md_to_html(md: string): string {
         continue;
       } else if (heading_level > 0 && char === " " && !in_heading) {
         in_heading = true;
-        html_line += `<h${heading_level} id='header-${header_num}'>`;
+        html_line += `<h${heading_level} id="header-${header_num}">`;
         header_num++;
         continue;
       } else if (heading_level > 0) {
-        html_line += "<p>"+"#".repeat(heading_level);
+        //not a heading
+        html_line = "<p>"+"#".repeat(heading_level);
         heading_level = 0;
+        warnings.push({
+          type: "heading-broken",
+          message: "Missing space after `#` for heading?",
+          line_number,
+        });
       }
     }
     //handle horizontal rules
@@ -203,17 +341,22 @@ export function parse_md_to_html(md: string): string {
       } else if (horizontal_num > 0) {
         //no longer a horizontal line
         html_line = "<p>"+"-".repeat(horizontal_num);
+        warnings.push({
+          type: "horizontal-rule-broken",
+          message: "Horizontal rule broken",
+          line_number,
+        });
       }
     }
     //handle images
     if (char === "!" && chars[i+1] === "[") {
       continue;
-    } else if (char === "]" && chars[i+1] === "(" && image_alt !== undefined) {
+    } else if (char === "]" && chars[i+1] === "(" && image_alt !== undefined && image_src === undefined) {
       continue;
     } else if (char === "[" && chars[i-1] === "!" && image_alt === undefined && image_src === undefined) {
       image_alt = "";
       continue;
-    } else if (char === "(" && chars[i-1] === "]" && image_alt !== undefined) {
+    } else if (char === "(" && chars[i-1] === "]" && image_alt !== undefined && image_src === undefined) {
       image_src = "";
       continue;
     } else if ((char === ")" || (chars[i+1] === ")" && i+1 === chars.length-1)) && image_src !== undefined) {
@@ -231,12 +374,46 @@ export function parse_md_to_html(md: string): string {
     } else if (image_src !== undefined) {
       image_src += char;
       continue;
-    } else {
+    } else if (was_image) {
       was_image = false;
+    }
+    //handle links
+    if (char === "[") {
+      link_content = "";
+      continue;
+    } else if (char === "]" && chars[i+1] === "(" && link_content !== undefined && link_href === undefined) {
+      continue;
+    } else if (char === "(" && chars[i-1] === "]" && link_content !== undefined && link_href === undefined) {
+      link_href = "";
+      continue;
+    } else if ((char === ")" || (chars[i+1] === ")" && i+1 === chars.length-1)) && link_href !== undefined && link_content !== undefined) {
+      let before_link: number;
+      if (chars[i+1] === ")" && i+1 === chars.length-1) {
+        link_href += char;
+        before_link = i-link_href.length-link_content.length-3;
+      } else {
+        before_link = i-link_href.length-link_content.length-4;
+      }
+      if (chars[before_link] === "\n" || before_link === -1) {
+        html_line = "<p>";
+      }
+      html_line += `<a href="${link_href}">${link_content}</a>`;
+      was_link = true;
+      link_content = undefined;
+      link_href = undefined;
+      continue;
+    } else if (link_content !== undefined && link_href === undefined) {
+      link_content += char;
+      continue;
+    } else if (link_href !== undefined) {
+      link_href += char;
+      continue;
+    } else if (was_link) {
+      was_link = false;
     }
     //add beginning paragraph
     if (i === 0 || chars[i-1] === "\n") {
-      html_line += "<p>";
+      html_line = "<p>"+html_line;
     }
     //handle italics and bolds
     if (char === "*" && asterisk_num < 2 && !in_asterisk) {
@@ -272,12 +449,12 @@ export function parse_md_to_html(md: string): string {
     html_line += char;
   }
 
-  return html;
+  return {
+    html,
+    warnings,
+  };
 }
 
-//WarningFunction to generate warnings and catch possible mistakes (eg: link not completed or possible space missing after #)
-export function find_warnings(md: string): Warning[] {
-  let warnings: Warning[] = [];
-  //
-  return warnings;
+export function parse_md_to_html(md: string): string {
+  return parse_md_to_html_with_warnings(md).html;
 }

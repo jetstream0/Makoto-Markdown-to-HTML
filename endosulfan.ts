@@ -36,7 +36,7 @@ export function test_assert_equal(first_item: any, second_item: any, test_name: 
   if (!silent && !passed) {
     //log info for debugging purposes
     //log both items
-    console.log(`${test_name}:\n${first_item}\n${second_item}`);
+    console.log(`${test_name}:\n========\n${first_item}\n========\n${second_item}\n========`);
     //log differences (partially effective)
     //don't log differences if not string
     if (typeof first_item !== "string") return;
@@ -48,9 +48,6 @@ export function test_assert_equal(first_item: any, second_item: any, test_name: 
     let dispute_length: number = 0;
     for (let i=0; i < longer.length; i++) {
       if (first_item[i] === second_item[i-offset]) {
-        if (i === 9) {
-          console.log(offset)
-        }
         continue;
       } else {
         if (dispute_length > 0) {
@@ -138,10 +135,7 @@ export type Warning = {
   line_number?: number,
 };
 
-export type WarningFunction = (input: any) => Warning[];
-
-export function generate_warnings(input: any, warning_function: WarningFunction, ignore_types: string[]) {
-  let warnings: Warning[] = warning_function(input);
+export function generate_warnings(warnings: Warning[], ignore_types: string[]) {
   let ignore_count: number = 0;
   for (let i=0; i < warnings.length; i++) {
     let warning: Warning = warnings[i];
