@@ -34,11 +34,16 @@ export function parse_md_to_html_with_warnings(md: string): ParseResult {
   let in_code_block: boolean = false;
   let first_line_code_block: boolean = false;
   let code_block_lang: string | undefined = undefined;
+  let space_start: boolean = false;
+  let in_blockquote: boolean = false;
+  let in_unordered_list: boolean = false;
+  let ordered_list_num: number = 0;
 
   //loop through characters
   let chars: string = md;
   for (let i=0; i < chars.length; i++) {
     let char: string = chars[i];
+    let end_add_char: boolean = true;
     //sanitize input
     if (char === "<") {
       char = "&lt;";
@@ -66,28 +71,30 @@ export function parse_md_to_html_with_warnings(md: string): ParseResult {
         //it can only be the first line once :)
         is_first_line = false;
       }
+      //preserving the newlines/linebreaks of the code block
+      if (in_code_block && char === "\n" && !first_line_code_block) {
+        html_line += "<br>\n";
+        space_start = true;
+      }
       //if first line of code block, create the code block div
       if (first_line_code_block) {
         code_block_lang = code_block_lang!.toLowerCase().trim();
         let known_langs: string[] = ["python", "py", "rust", "rs", "javascript", "js", "typescript", "ts", "java", "c", "cpp", "csharp", "html", "css", "markdown", "md", "brainfuck", "php", "bash", "perl", "sql", "ruby", "basic", "assembly", "asm", "wasm", "r", "go", "swift"]
-        if (!known_langs.includes(code_block_lang)) {
+        if (!known_langs.includes(code_block_lang) && code_block_lang !== "") {
           warnings.push({
             type: "unknown-language",
             message: `Unknown language '${code_block_lang}' for code block`,
             line_number,
           });
         }
-        html_line = `<div class="code-block code-${code_block_lang}">`;
+        if (code_block_lang === "") {
+          //if no code block language specified, don't put it as a css class obviously
+          html_line = `<div class="code-block">\n`;
+        } else {
+          html_line = `<div class="code-block code-${code_block_lang}">\n`;
+        }
         code_block_lang = undefined;
         first_line_code_block = false;
-      }
-      if (in_code_block && char === "\n") {
-        html_line += "\n";
-      }
-      //close code block div
-      if (in_code_block && i === chars.length-1) {
-        in_code_block = false;
-        html_line = "</div>";
       }
       //if image was never completed
       if (image_alt !== undefined) {
@@ -138,6 +145,12 @@ export function parse_md_to_html_with_warnings(md: string): ParseResult {
       //if last character
       if (i === chars.length-1 && char !== "\n") {
         let add_char: boolean = true;
+        //close code block div
+        if (in_code_block && i === chars.length-1) {
+          in_code_block = false;
+          add_char = false;
+          html_line = "</div>";
+        }
         //if in code
         if (in_code && char === "`") {
           in_code = false;
@@ -177,6 +190,11 @@ export function parse_md_to_html_with_warnings(md: string): ParseResult {
       html += html_line;
       if (html_line.startsWith("<p>")) {
         html += "</p>\n";
+      } else if ((html_line.startsWith("<li>") || html_line.startsWith("<ul>")) && in_unordered_list) {
+        html += "</li>\n";
+        if (i === chars.length-1) {
+          html += "</ul>";
+        }
       }
       html_line = "";
       horizontal_num = 0;
@@ -203,7 +221,14 @@ export function parse_md_to_html_with_warnings(md: string): ParseResult {
         }
         heading_level = 0;
         in_heading = false;
-        continue;
+        //continue;
+      }
+      //if in blockquote
+      if (in_blockquote && i === chars.length-1) {
+        if (html[html.length-1] !== "\n") {
+          html += "\n";
+        }
+        html += "</blockquote>";
       }
       heading_level = 0;
       if (i === chars.length - 1) {
@@ -212,8 +237,23 @@ export function parse_md_to_html_with_warnings(md: string): ParseResult {
       }
       continue;
     }
+    //block quotes
+    if (char === " " && chars[i-1] === ">" && !in_blockquote && (chars[i-2] === "\n" || i === 1)) {
+      in_blockquote = true;
+      html += "<blockquote>\n";
+      continue;
+    } else if (in_blockquote && chars[i-1] === "\n" && (char !== "&gt;" || chars[i+1] !== " ")) {
+      html_line = "</blockquote>\n";
+      in_blockquote = false;
+    } else if (char === "&gt;" && chars[i+1] === " " && (chars[i-1] === "\n" || i === 0)) {
+      //do not add the '>' to the html
+      end_add_char = false;
+    } else if (char === " " && chars[i-1] === ">" && chars[i-2] === "\n") {
+      //do not add the ' ' in '> ' to the html
+      end_add_char = false;
+    }
     //code blocks
-    if (char === "`" && chars[i+1] !== "`" && (chars.slice(i-3, i) === "\n``" || (i === 2 && chars.slice(i-2, i) === "``"))) {
+    if (char === "`" && chars[i+1] !== "`" && ((chars.slice(i-3, i) === "\n``" || (i === 2 && chars.slice(0, i) === "``")) || (in_blockquote && (chars.slice(i-5, i) === "\n> ``" || (i === 4 && chars.slice(0, i) === "> ``"))))) {
       if (!in_code_block) {
         //make sure there is ``` further on, that is not backslashed
         let skip_next: boolean = false;
@@ -228,6 +268,12 @@ export function parse_md_to_html_with_warnings(md: string): ParseResult {
             skip_next = true;
           } else if (chars.slice(adjusted_index-3, adjusted_index+1) === "\n```" && (adjusted_index === chars.length-1 || chars[adjusted_index+1] === "\n")) {
             end_found = true;
+            break;
+          } else if (in_blockquote && chars.slice(adjusted_index-5, adjusted_index+1) === "\n> ```" && (adjusted_index === chars.length-1 || chars[adjusted_index+1] === "\n")) {
+            end_found = true;
+            break;
+          } else if (in_blockquote && chars[adjusted_index] === "\n" && (chars[adjusted_index+1] !== ">" || chars[adjusted_index+2] !== " ")) {
+            //blockquote ended without finding end
             break;
           }
         }
@@ -257,8 +303,30 @@ export function parse_md_to_html_with_warnings(md: string): ParseResult {
       continue;
     } else if (in_code_block) {
       //do not render markdown inside code blocks... obviously
-      html_line += char;
+      //preserve spaces at the beginning of lines
+      if (char === " " && space_start) {
+        html_line += "&nbsp;";
+      } else if (in_blockquote && ((char === " " && chars.slice(i-2, i) === "\n>") || (char === "&gt;" && chars[i-1] === "\n" && chars[i+1] === " "))) {
+        //do not add the blockquote syntax thing "> " to the codeblock
+      } else {
+        space_start = false;
+        html_line += char;
+      }
       continue;
+    }
+    //handle unordered lists
+    if (char === " " && chars[i-1] === "-" && (chars[i-2] === "\n" || i === 1)) {
+      //it's a unordered list bullet point!!
+      if (!in_unordered_list) {
+        html_line = "<ul>\n<li>";
+      } else {
+        html_line = "<li>";
+      }
+      in_unordered_list = true;
+      continue;
+    } else if (in_unordered_list && ((chars[i-1] === "\n" && char !== "-") || (chars[i-2] === "\n" && char !== " "))) {
+      html_line += "</ul>\n";
+      in_unordered_list = false;
     }
     //handle code
     if (char === "`" && !in_code) {
@@ -305,13 +373,14 @@ export function parse_md_to_html_with_warnings(md: string): ParseResult {
     }
     //handle heading levels
     //ensure headings are continuous and have after it ("#a##" or "##abc" are not a valid headings), and are at the beginning of the line
-    if (chars.slice(i-heading_level-1, i) === "\n"+"#".repeat(heading_level) || (is_first_line && chars.slice(0, i) === "#".repeat(heading_level))) {
+    //ensure headings are possible in block quotes
+    if (chars.slice(i-heading_level-1, i) === "\n"+"#".repeat(heading_level) || (is_first_line && chars.slice(0, i) === "#".repeat(heading_level)) || (chars.slice(i-heading_level-3, i) === "\n> "+"#".repeat(heading_level) && in_blockquote) || (is_first_line && chars.slice(0, i) === "> "+"#".repeat(heading_level) && in_blockquote)) {
       if (char === "#" && !in_heading && heading_level <= 6) {
         heading_level++;
         continue;
       } else if (heading_level > 0 && char === " " && !in_heading) {
         in_heading = true;
-        html_line += `<h${heading_level} id="header-${header_num}">`;
+        html_line = `<h${heading_level} id="header-${header_num}">`;
         header_num++;
         continue;
       } else if (heading_level > 0) {
@@ -446,7 +515,9 @@ export function parse_md_to_html_with_warnings(md: string): ParseResult {
       asterisk_out_num = 0;
     }
     //
-    html_line += char;
+    if (end_add_char) {
+      html_line += char;
+    }
   }
 
   return {
