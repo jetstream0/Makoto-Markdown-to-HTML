@@ -37,7 +37,13 @@ export function parse_md_to_html_with_warnings(md: string): ParseResult {
   let space_start: boolean = false;
   let in_blockquote: boolean = false;
   let in_unordered_list: boolean = false;
+  let blockquote_list: boolean = false;
+  let in_ordered_list: boolean = false;
   let ordered_list_num: number = 0;
+  let in_superscript: boolean = false;
+  let in_table: boolean = false;
+  let in_table_header: boolean = false;
+  let table_item: string = "";
 
   //loop through characters
   let chars: string = md;
@@ -165,6 +171,16 @@ export function parse_md_to_html_with_warnings(md: string): ParseResult {
         if ((was_image || was_link) && char === ")") {
           add_char = false;
         }
+        //handle table row ending thing?
+        if (in_table && char === "|") {
+          in_table = false;
+          add_char = false;
+          if (in_table_header) {
+            html_line += `<th>${table_item}</th>\n</tr>\n</table>`;
+          } else {
+            html_line += `<td>${table_item}</td>\n</tr>\n</table>`;
+          }
+        }
         //if previous character is also newline, there hasn't been opportunity to add a <p>, so add it!
         if (chars[i-1] === "\n") {
           html_line = "<p>";
@@ -183,17 +199,89 @@ export function parse_md_to_html_with_warnings(md: string): ParseResult {
             add_char = false;
           }
         }
+        //ending superscript
+        if (in_superscript && char === "^") {
+          html_line += "</sup>";
+          in_superscript = false;
+          add_char = false;
+        }
         if (add_char) {
           html_line += char;
         }
       }
+      if (in_asterisk) {
+        //bold/italic never ended
+        if (asterisk_num === 1) {
+          //remove the last <i> and replace it with a *
+          let split: string[] = html_line.split("<i>");
+          html_line = "";
+          for (let ii=0; ii < split.length; ii++) {
+            html_line += split[ii];
+            if (ii !== split.length-1) {
+              if (ii === split.length-2) {
+                html_line += "*";
+              } else {
+                html_line += "<i>";
+              }
+            }
+          }
+        } else if (asterisk_num === 2) {
+          //remove the last <b> and replace it with a **
+          let split: string[] = html_line.split("<b>");
+          html_line = "";
+          for (let ii=0; ii < split.length; ii++) {
+            html_line += split[ii];
+            if (ii !== split.length-1) {
+              if (ii === split.length-2) {
+                html_line += "**";
+              } else {
+                html_line += "<b>";
+              }
+            }
+          }
+        }
+        asterisk_num = 0;
+        asterisk_out_num = 0;
+        in_asterisk = false;
+      }
+      if (in_superscript) {
+        //superscript never ended
+        //remove the last <sup> and replace it with a ^
+        let split: string[] = html_line.split("<sup>");
+        html_line = "";
+        for (let ii=0; ii < split.length; ii++) {
+          html_line += split[ii];
+          if (ii !== split.length-1) {
+            if (ii === split.length-2) {
+              html_line += "^";
+            } else {
+              html_line += "<sup>";
+            }
+          }
+        }
+        in_superscript = false;
+      }
+      //ending table row
+      if (in_table) {
+        in_table_header = false;
+        html_line += "</tr>\n";
+      }
       html += html_line;
       if (html_line.startsWith("<p>")) {
         html += "</p>\n";
-      } else if ((html_line.startsWith("<li>") || html_line.startsWith("<ul>")) && in_unordered_list) {
+      } else if ((html_line.startsWith("<li>") || html_line.startsWith("<ul>") || html_line.startsWith("<ol>")) && (in_unordered_list || in_ordered_list)) {
         html += "</li>\n";
-        if (i === chars.length-1) {
+        if (in_ordered_list) {
+          ordered_list_num++;
+        }
+        if (i === chars.length-1 && in_unordered_list) {
           html += "</ul>";
+          //set it to false, not that it matters
+          blockquote_list = false;
+        } else if (i === chars.length-1 && in_ordered_list) {
+          html += "</ol>";
+          //set it to false, not that it matters
+          blockquote_list = false;
         }
       }
       html_line = "";
@@ -229,6 +317,11 @@ export function parse_md_to_html_with_warnings(md: string): ParseResult {
           html += "\n";
         }
         html += "</blockquote>";
+        in_blockquote = false;
+      } else if (in_blockquote && char === "\n" && chars[i-1] === "\n") {
+        //two new lines in a row means blockquote ends
+        html += "</blockquote>\n";
+        in_blockquote = false;
       }
       heading_level = 0;
       if (i === chars.length - 1) {
@@ -243,7 +336,20 @@ export function parse_md_to_html_with_warnings(md: string): ParseResult {
       html += "<blockquote>\n";
       continue;
     } else if (in_blockquote && chars[i-1] === "\n" && (char !== "&gt;" || chars[i+1] !== " ")) {
-      html_line = "</blockquote>\n";
+      if (blockquote_list) {
+        //end list if list started in blockquote and blockquote ends
+        blockquote_list = false;
+        if (in_unordered_list) {
+          html += "</ul>\n</blockquote>\n";
+        } else if (in_ordered_list) {
+          html += "</ol>\n</blockquote>\n";
+        }
+        ordered_list_num = 0;
+        in_ordered_list = false;
+        in_unordered_list = false;
+      } else {
+        html += "</blockquote>\n";
+      }
       in_blockquote = false;
     } else if (char === "&gt;" && chars[i+1] === " " && (chars[i-1] === "\n" || i === 0)) {
       //do not add the '>' to the html
@@ -304,10 +410,10 @@ export function parse_md_to_html_with_warnings(md: string): ParseResult {
     } else if (in_code_block) {
       //do not render markdown inside code blocks... obviously
       //preserve spaces at the beginning of lines
-      if (char === " " && space_start) {
-        html_line += "&nbsp;";
-      } else if (in_blockquote && ((char === " " && chars.slice(i-2, i) === "\n>") || (char === "&gt;" && chars[i-1] === "\n" && chars[i+1] === " "))) {
+      if (in_blockquote && ((char === " " && chars.slice(i-2, i) === "\n>") || (char === "&gt;" && chars[i-1] === "\n" && chars[i+1] === " "))) {
         //do not add the blockquote syntax thing "> " to the codeblock
+      } else if (char === " " && space_start) {
+        html_line += "&nbsp;";
       } else {
         space_start = false;
         html_line += char;
@@ -315,18 +421,42 @@ export function parse_md_to_html_with_warnings(md: string): ParseResult {
       continue;
     }
     //handle unordered lists
-    if (char === " " && chars[i-1] === "-" && (chars[i-2] === "\n" || i === 1)) {
+    if (char === " " && chars[i-1] === "-" && (chars[i-2] === "\n" || i === 1 || (in_blockquote && chars.slice(i-3, i-1) === "> " && (chars[i-4] === "\n" || i === 3)))) {
       //it's a unordered list bullet point!!
-      if (!in_unordered_list) {
+      if (!in_unordered_list || (!in_blockquote && blockquote_list)) {
         html_line = "<ul>\n<li>";
+        blockquote_list = false;
       } else {
         html_line = "<li>";
       }
       in_unordered_list = true;
+      if (in_blockquote) {
+        blockquote_list = true;
+      }
       continue;
-    } else if (in_unordered_list && ((chars[i-1] === "\n" && char !== "-") || (chars[i-2] === "\n" && char !== " "))) {
-      html_line += "</ul>\n";
+    } else if (in_unordered_list && ((((chars[i-1] === "\n" && char !== "-") || (chars[i-2] === "\n" && char !== " ")) && !blockquote_list) || (((chars[i-3] === "\n" && char !== "-") || (chars[i-4] === "\n" && char !== " ")) && blockquote_list))) {
+      html += "</ul>\n";
       in_unordered_list = false;
+      blockquote_list = false;
+    }
+    //handle ordered lists
+    let ol_num_length: number = String(ordered_list_num+1).length;
+    if (char === " " && chars.slice(i-1-ol_num_length, i) === `${ordered_list_num+1}.` && (chars[i-ol_num_length-2] === "\n" || i === ol_num_length+1 || (in_blockquote && chars.slice(i-ol_num_length-3, i) === `> ${ordered_list_num+1}.` && (chars[i-ol_num_length-4] === "\n" || i === ol_num_length+3)))) {
+      if (ordered_list_num === 0) {
+        html_line = "<ol>\n<li>";
+        in_ordered_list = true;
+      } else {
+        html_line = "<li>";
+      }
+      if (in_blockquote) {
+        blockquote_list = true;
+      }
+      continue;
+    } else if (in_ordered_list && ((chars[i-ol_num_length-2] === "\n" && chars.slice(i-ol_num_length-1, i+1) !== `${ordered_list_num+1}. ` && !in_blockquote) || (in_blockquote && chars[i-ol_num_length-4] === "\n" && chars.slice(i-ol_num_length-3, i+1) !== `> ${ordered_list_num+1}. `))) {
+      html += "</ol>\n";
+      ordered_list_num = 0;
+      in_ordered_list = false;
+      blockquote_list = false;
     }
     //handle code
     if (char === "`" && !in_code) {
@@ -369,6 +499,35 @@ export function parse_md_to_html_with_warnings(md: string): ParseResult {
       continue;
     } else if (in_code) {
       html_line += char;
+      continue;
+    }
+    //handle tables
+    if (char === "|" && (chars[i-1] === "\n" || i === 0 || (in_blockquote && chars.slice(i-2, i) === "> " && (chars[i-3] === "\n" || i === 3)))) {
+      if (!in_table) {
+        //start of table
+        in_table = true;
+        in_table_header = true;
+        html += "<table>\n<tr>\n";
+      } else {
+        //just a new table row
+        html += "<tr>\n";
+      }
+      continue;
+    } else if (in_table && char === "|") {
+      if (in_table_header) {
+        html_line += `<th>${table_item}</th>\n`;
+      } else {
+        html_line += `<td>${table_item}</td>\n`;
+      }
+      table_item = "";
+      continue;
+    } else if (in_table && ((chars[i-1] === "\n" && char !== "|") || (in_blockquote && chars[i-3] === "\n" && char !== "|"))) {
+      in_table = false;
+      table_item = "";
+      //table ends
+      html += "</table>\n";
+    } else if (in_table) {
+      table_item += char;
       continue;
     }
     //handle heading levels
@@ -513,6 +672,18 @@ export function parse_md_to_html_with_warnings(md: string): ParseResult {
       }
     } else if (char !== "*" && in_asterisk) {
       asterisk_out_num = 0;
+    }
+    //handle superscripts
+    if (char === "^") {
+      if (in_superscript) {
+        in_superscript = false;
+        html_line += "</sup>";
+        continue;
+      } else {
+        in_superscript = true;
+        html_line += "<sup>";
+        continue;
+      }
     }
     //
     if (end_add_char) {
