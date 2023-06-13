@@ -225,6 +225,11 @@ export function parse_md_to_html_with_warnings(md: string): ParseResult {
               }
             }
           }
+          warnings.push({
+            type: "italic-not-closed",
+            message: "Italic not closed, may be missing closing '*'? Backslash the '*' if this is intentional",
+            line_number,
+          });
         } else if (asterisk_num === 2) {
           //remove the last <b> and replace it with a **
           let split: string[] = html_line.split("<b>");
@@ -239,6 +244,11 @@ export function parse_md_to_html_with_warnings(md: string): ParseResult {
               }
             }
           }
+          warnings.push({
+            type: "bold-not-closed",
+            message: "Bold not closed, may be missing closing '**'? Backslash the '**' if this is intentional",
+            line_number,
+          });
         }
         asterisk_num = 0;
         asterisk_out_num = 0;
@@ -260,6 +270,11 @@ export function parse_md_to_html_with_warnings(md: string): ParseResult {
           }
         }
         in_superscript = false;
+        warnings.push({
+          type: "superscript-not-closed",
+          message: "Superscript not closed, may be missing closing '^'? Backslash the '^' if this is intentional",
+          line_number,
+        });
       }
       //ending table row
       if (in_table) {
@@ -286,7 +301,23 @@ export function parse_md_to_html_with_warnings(md: string): ParseResult {
       }
       html_line = "";
       horizontal_num = 0;
-      line_number++;
+      if (char === "\n") {
+        line_number++;
+      }
+      //check to see if unordered list is ending
+      if (in_unordered_list && char === "\n" && ((chars.slice(i+1, i+3) !== "- " && !blockquote_list) || (chars.slice(i+1, i+5) !== "> - " && blockquote_list))) {
+        html += "</ul>\n";
+        in_unordered_list = false;
+        blockquote_list = false;
+      }
+      //check to see if ordered list is ending
+      let ol_num_length: number = String(ordered_list_num+1).length;
+      if (in_ordered_list && char === "\n" && ((chars.slice(i+1, i+ol_num_length+3) !== `${ordered_list_num+1}. ` && !blockquote_list) || (chars.slice(i+1, i+ol_num_length+5) !== `> ${ordered_list_num+1}. ` && blockquote_list))) {
+        html += "</ol>\n";
+        ordered_list_num = 0;
+        in_ordered_list = false;
+        blockquote_list = false;
+      }
       if (horizontal_rule || was_image || was_link) {
         if (i !== chars.length - 1 && html[html.length-1] !== "\n") {
           //only add new line if there isn't already one, and isn't last character
@@ -434,10 +465,6 @@ export function parse_md_to_html_with_warnings(md: string): ParseResult {
         blockquote_list = true;
       }
       continue;
-    } else if (in_unordered_list && ((((chars[i-1] === "\n" && char !== "-") || (chars[i-2] === "\n" && char !== " ")) && !blockquote_list) || (((chars[i-3] === "\n" && char !== "-") || (chars[i-4] === "\n" && char !== " ")) && blockquote_list))) {
-      html += "</ul>\n";
-      in_unordered_list = false;
-      blockquote_list = false;
     }
     //handle ordered lists
     let ol_num_length: number = String(ordered_list_num+1).length;
@@ -452,11 +479,6 @@ export function parse_md_to_html_with_warnings(md: string): ParseResult {
         blockquote_list = true;
       }
       continue;
-    } else if (in_ordered_list && ((chars[i-ol_num_length-2] === "\n" && chars.slice(i-ol_num_length-1, i+1) !== `${ordered_list_num+1}. ` && !in_blockquote) || (in_blockquote && chars[i-ol_num_length-4] === "\n" && chars.slice(i-ol_num_length-3, i+1) !== `> ${ordered_list_num+1}. `))) {
-      html += "</ol>\n";
-      ordered_list_num = 0;
-      in_ordered_list = false;
-      blockquote_list = false;
     }
     //handle code
     if (char === "`" && !in_code) {
@@ -534,7 +556,7 @@ export function parse_md_to_html_with_warnings(md: string): ParseResult {
     //ensure headings are continuous and have after it ("#a##" or "##abc" are not a valid headings), and are at the beginning of the line
     //ensure headings are possible in block quotes
     if (chars.slice(i-heading_level-1, i) === "\n"+"#".repeat(heading_level) || (is_first_line && chars.slice(0, i) === "#".repeat(heading_level)) || (chars.slice(i-heading_level-3, i) === "\n> "+"#".repeat(heading_level) && in_blockquote) || (is_first_line && chars.slice(0, i) === "> "+"#".repeat(heading_level) && in_blockquote)) {
-      if (char === "#" && !in_heading && heading_level <= 6) {
+      if (char === "#" && !in_heading && heading_level < 6) {
         heading_level++;
         continue;
       } else if (heading_level > 0 && char === " " && !in_heading) {
@@ -542,6 +564,12 @@ export function parse_md_to_html_with_warnings(md: string): ParseResult {
         html_line = `<h${heading_level} id="header-${header_num}">`;
         header_num++;
         continue;
+      } else if (char === "#" && heading_level === 6) {
+        warnings.push({
+          type: "too-much-header",
+          message: "Header cannot be more than 6 levels",
+          line_number,
+        })
       } else if (heading_level > 0) {
         //not a heading
         html_line = "<p>"+"#".repeat(heading_level);
@@ -569,11 +597,13 @@ export function parse_md_to_html_with_warnings(md: string): ParseResult {
       } else if (horizontal_num > 0) {
         //no longer a horizontal line
         html_line = "<p>"+"-".repeat(horizontal_num);
-        warnings.push({
-          type: "horizontal-rule-broken",
-          message: "Horizontal rule broken",
-          line_number,
-        });
+        if (horizontal_num > 2) {
+          warnings.push({
+            type: "horizontal-rule-broken",
+            message: "Horizontal rule broken",
+            line_number,
+          });
+        }
       }
     }
     //handle images
@@ -590,6 +620,13 @@ export function parse_md_to_html_with_warnings(md: string): ParseResult {
     } else if ((char === ")" || (chars[i+1] === ")" && i+1 === chars.length-1)) && image_src !== undefined) {
       if (chars[i+1] === ")" && i+1 === chars.length-1) {
         image_src += char;
+      }
+      if (image_alt === "") {
+        warnings.push({
+          type: "missing-image-alt",
+          message: "Image is missing alt text, this is bad for accessibility",
+          line_number,
+        });
       }
       html_line += `<img src="${image_src}" alt="${image_alt}">`;
       was_image = true;
@@ -624,6 +661,13 @@ export function parse_md_to_html_with_warnings(md: string): ParseResult {
       }
       if (chars[before_link] === "\n" || before_link === -1) {
         html_line = "<p>";
+      }
+      if (link_content === "") {
+        warnings.push({
+          type: "empty-link",
+          message: "Link missing text",
+          line_number,
+        });
       }
       html_line += `<a href="${link_href}">${link_content}</a>`;
       was_link = true;

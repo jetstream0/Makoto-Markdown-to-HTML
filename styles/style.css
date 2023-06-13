@@ -26,15 +26,14 @@ html, body {
 #editor {
   box-sizing: border-box;
   width: 95%;
-  width: calc(100% - 15px);
+  width: calc(100% - 58px);
   height: 95%;
   margin: 0;
   word-break: break-all;
   font-family: 'Courier New', Courier, monospace;
   font-size: 0.9em;
   padding: 3px;
-  padding-left: 35px;
-  margin-left: 15px;
+  padding-left: 58px;
   overflow-y: auto;
 }
 
@@ -44,7 +43,7 @@ html, body {
 
 #rendered-text {
   padding: 5px;
-  word-break: break-all;
+  word-break: break-word;
   font-family: Arial, sans-serif;
 }
 
@@ -55,4 +54,17 @@ html, body {
 
 #rendered-text.dark .code-block {
   color: #2d2d2d;
+}
+
+.line-warning {
+  position: relative;
+  display: inline-block;
+  width: 0;
+  left: -58px;
+  margin-top: -1px;
+  font-size: 0.9em;
+}
+
+.line-warning::after {
+  content: "⚠️";
 }
