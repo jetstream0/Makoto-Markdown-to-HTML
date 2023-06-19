@@ -1,6 +1,14 @@
 import { parse_md_to_html_with_warnings, ParseResult } from './makoto.js';
 import type { Warning } from './endosulfan.js';
 
+/*todo:
+- FIX not being able to delete at start of line when there is warning on the line
+- show multiple warnings per line
+- show warnings that do not have line number
+- show warning type, ability to ignore warnings based on type
+- keyboard shortcuts???
+*/
+
 let editor: HTMLTextAreaElement = document.getElementById("editor")! as HTMLTextAreaElement;
 let preview: HTMLElement = document.getElementById("rendered-text")!;
 let dark_theme_toggle: HTMLInputElement = document.getElementById("dark-theme-toggle")! as HTMLInputElement;
@@ -77,7 +85,7 @@ if (params.get("help") === "true") {
   (editor.children[0] as HTMLElement).innerText = "# Makoto Markdown Parser";
   let extra_lines: string[] = [
     "This markdown parser is powered by spaghetti. You can have **bold text** or *italic text*, and even ^superscripts!^",
-    "Of course, you can have [links](https://en.wikipedia.org), and use backslashes to \*escape\*. Here's a list:",
+    "Of course, you can have [links](https://en.wikipedia.org), and use backslashes to \\*escape\\*. Here's a list:",
     "- uno",
     "- dos",
     "- tres",

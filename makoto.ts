@@ -388,6 +388,12 @@ export function parse_md_to_html_with_warnings(md: string): ParseResult {
     } else if (char === " " && chars[i-1] === ">" && chars[i-2] === "\n") {
       //do not add the ' ' in '> ' to the html
       end_add_char = false;
+    } else if (char === "&gt;" && chars[i+1] !== " " && (chars[i-1] === "\n" || i === 0)) {
+      warnings.push({
+        type: "blockquote-broken",
+        message: "Missing space after `>` for blockquote?",
+        line_number,
+      });
     }
     //code blocks
     if (char === "`" && chars[i+1] !== "`" && ((chars.slice(i-3, i) === "\n``" || (i === 2 && chars.slice(0, i) === "``")) || (in_blockquote && (chars.slice(i-5, i) === "\n> ``" || (i === 4 && chars.slice(0, i) === "> ``"))))) {
@@ -465,6 +471,12 @@ export function parse_md_to_html_with_warnings(md: string): ParseResult {
         blockquote_list = true;
       }
       continue;
+    } else if (char !== " " && chars[i-1] === "-" && (chars[i-2] === "\n" || i === 1)) {
+      warnings.push({
+        type: "unordered-list-broken",
+        message: "Missing space after unordered list",
+        line_number,
+      });
     }
     //handle ordered lists
     let ol_num_length: number = String(ordered_list_num+1).length;
@@ -666,6 +678,14 @@ export function parse_md_to_html_with_warnings(md: string): ParseResult {
         warnings.push({
           type: "empty-link",
           message: "Link missing text",
+          line_number,
+        });
+      }
+      //":" includes protocols like http:// https:// wss:// and app uris
+      if (!link_href.includes(":") && !link_href.startsWith("./") && !link_href.startsWith("/")) {
+        warnings.push({
+          type: "weird-href",
+          message: "Link href does not start with './' or '/' or contain ':', please double check it",
           line_number,
         });
       }

@@ -28,7 +28,22 @@ Quirks
 
 /*
 List of warning types
-- 
+- unknown-language
+- image-incomplete
+- link-incomplete
+- italic-not-closed
+- bold-not-closed
+- superscript-not-closed
+- blockquote-broken
+- code-block-not-closed
+- unordered-list-broken
+- code-snippet-not-closed
+- too-much-header
+- heading-broken
+- horizontal-rule-broken
+- missing-image-alt
+- empty-link
+- weird-href
 */
 
 //tests
