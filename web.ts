@@ -2,7 +2,6 @@ import { parse_md_to_html_with_warnings, ParseResult } from './makoto.js';
 import type { Warning } from './endosulfan.js';
 
 /*todo:
-- FIX not being able to delete at start of line when there is warning on the line
 - show multiple warnings per line
 - show warnings that do not have line number
 - show warning type, ability to ignore warnings based on type
@@ -12,18 +11,24 @@ import type { Warning } from './endosulfan.js';
 let editor: HTMLTextAreaElement = document.getElementById("editor")! as HTMLTextAreaElement;
 let preview: HTMLElement = document.getElementById("rendered-text")!;
 let dark_theme_toggle: HTMLInputElement = document.getElementById("dark-theme-toggle")! as HTMLInputElement;
+let html_toggle: HTMLInputElement = document.getElementById("html-toggle")! as HTMLInputElement;
 
+let show_html: boolean = false;
 let unedited: boolean = true;
 
+let use_local_storage: boolean = false;
+
+let ignore_all_warnings: boolean = false;
+let ignore_warnings: string[] = [];
+
 function render_warnings(warnings: Warning[]) {
-  document.querySelectorAll(".line-warning").forEach((item: Element) => item.remove());
+  document.querySelectorAll(".line-warning").forEach((item: Element) => item.classList.remove("line-warning"));
   warnings.forEach((warning: Warning) => {
+    if (ignore_warnings.includes(warning.type)) return;
     if (warning.line_number) {
-      let line: Element = editor.children[warning.line_number-1];
-      let warning_span: HTMLElement = document.createElement("SPAN");
-      warning_span.classList.add("line-warning");
-      warning_span.title = warning.message;
-      line.insertBefore(warning_span, line.childNodes[0]);
+      let line: HTMLElement = editor.children[warning.line_number-1] as HTMLElement;
+      line.classList.add("line-warning");
+      line.title = warning.message;
     }
   });
 }
@@ -31,9 +36,18 @@ function render_warnings(warnings: Warning[]) {
 const refresh_html = () => {
   //go through the lines and get the editor text
   let editor_text: string = Array.from(editor.children).map((item) => item.textContent).reduce((added, current) => added+"\n"+current);
+  if (use_local_storage) {
+    localStorage.setItem("markdown", editor_text);
+  }
   let parsed: ParseResult = parse_md_to_html_with_warnings(editor_text);
-  render_warnings(parsed.warnings);
-  preview.innerHTML = parsed.html;
+  if (!ignore_all_warnings) {
+    render_warnings(parsed.warnings);
+  }
+  if (show_html) {
+    preview.innerText = parsed.html;
+  } else {
+    preview.innerHTML = parsed.html;
+  }
 };
 
 editor.addEventListener("keyup", () => {
@@ -74,14 +88,24 @@ const theme_change = () => {
 
 dark_theme_toggle.addEventListener("change", theme_change);
 
+const html_change = () => {
+  let changed: boolean = show_html !== html_toggle.checked;
+  if (changed) {
+    show_html = show_html ? false : true;
+    refresh_html();
+  }
+}
+
+html_toggle.addEventListener("change", html_change);
+
 //applies if the browser remembers what the user typed in
 if (editor.innerText.trim() !== "markdown goes here...") {
   unedited = false;
 }
 
-//give a quick intro to markdown
 let params: URLSearchParams = new URLSearchParams(window.location.search);
 if (params.get("help") === "true") {
+  //give a quick intro to markdown
   (editor.children[0] as HTMLElement).innerText = "# Makoto Markdown Parser";
   let extra_lines: string[] = [
     "This markdown parser is powered by spaghetti. You can have **bold text** or *italic text*, and even ^superscripts!^",
@@ -108,8 +132,36 @@ if (params.get("help") === "true") {
     additional_line.innerHTML = extra_lines[i];
     editor.appendChild(additional_line);
   }
-  //
+}
+
+if (params.get("save") === "true") {
+  //save to local storage, and retrieve from it
+  if (localStorage) {
+    use_local_storage = true;
+  }
+  let stored_markdown: string = localStorage.getItem("markdown");
+  if (stored_markdown) {
+    let extra_lines: string[] = stored_markdown.split("\n");
+    (editor.children[0] as HTMLElement).innerText = extra_lines.shift();
+    for (let i=0; i < extra_lines.length; i++) {
+      let additional_line: HTMLElement =  document.createElement("LI");
+      //needs to be .innerHTML so the html space entity can be parsed
+      additional_line.innerHTML = extra_lines[i];
+      editor.appendChild(additional_line);
+    }
+    unedited = false;
+  }
+}
+
+if (params.get("ignore")) {
+  //allow user to specify warnings to ignore
+  if (params.get("ignore") === "all") {
+    ignore_all_warnings = true;
+  } else {
+    ignore_warnings = params.get("ignore").split(",");
+  }
 }
 
 refresh_html();
 theme_change();
+html_change();

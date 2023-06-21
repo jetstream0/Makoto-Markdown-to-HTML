@@ -471,7 +471,7 @@ export function parse_md_to_html_with_warnings(md: string): ParseResult {
         blockquote_list = true;
       }
       continue;
-    } else if (char !== " " && chars[i-1] === "-" && (chars[i-2] === "\n" || i === 1)) {
+    } else if (char !== " " && char !== "-" && chars[i-1] === "-" && (chars[i-2] === "\n" || i === 1)) {
       warnings.push({
         type: "unordered-list-broken",
         message: "Missing space after unordered list",

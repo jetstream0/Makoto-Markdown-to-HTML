@@ -26,7 +26,7 @@ html, body {
 #editor {
   box-sizing: border-box;
   width: 95%;
-  width: calc(100% - 58px);
+  width: 100%;
   height: 95%;
   margin: 0;
   word-break: break-all;
@@ -56,15 +56,32 @@ html, body {
   color: #2d2d2d;
 }
 
-.line-warning {
+#preview-tools {
+  font-family: Arial, sans-serif;
+  float: left;
+  width: 100%;
+}
+
+.line-warning::before {
   position: relative;
   display: inline-block;
   width: 0;
   left: -58px;
   margin-top: -1px;
   font-size: 0.9em;
+  content: "⚠️";
 }
 
-.line-warning::after {
-  content: "⚠️";
+.mobile-only {
+  display: none;
+}
+
+#see-docs {
+  float: right;
+}
+
+@media screen and (max-width: 950px) {
+  .mobile-only {
+    display: block;
+  }
 }
