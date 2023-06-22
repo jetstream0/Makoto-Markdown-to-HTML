@@ -7,15 +7,15 @@ html, body {
 
 #grid-container {
   display: grid;
-  grid-template-columns: auto auto;
+  grid-template-columns: 50vw 50vw;
   height: 100vh;
   width: 100vw;
 }
 
 .section {
   padding: 17px;
-  height: 100%;
-  width: 49vw;
+  height: 100vh;
+  width: 100%;
   box-sizing: border-box;
 }
 
@@ -42,6 +42,8 @@ html, body {
 }
 
 #rendered-text {
+  height: 100%;
+  overflow-y: scroll;
   padding: 5px;
   word-break: break-word;
   font-family: Arial, sans-serif;
@@ -83,5 +85,17 @@ html, body {
 @media screen and (max-width: 950px) {
   .mobile-only {
     display: block;
+  }
+
+  #grid-container {
+    grid-template-columns: auto;
+  }
+
+  .section {
+    height: 60vh;
+  }
+
+  #see-docs {
+    float: initial;
   }
 }
