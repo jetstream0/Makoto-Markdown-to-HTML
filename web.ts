@@ -35,7 +35,7 @@ function render_warnings(warnings: Warning[]) {
 
 const refresh_html = () => {
   //go through the lines and get the editor text
-  let editor_text: string = Array.from(editor.children).map((item) => item.textContent).reduce((added, current) => added+"\n"+current);
+  let editor_text: string = Array.from(editor.children).map((item) => item.textContent).reduce((added, current) => added+"\n"+current)!;
   if (use_local_storage) {
     localStorage.setItem("markdown", editor_text);
   }
@@ -60,7 +60,7 @@ editor.addEventListener("keyup", () => {
     let range: Range = document.createRange();
     range.setStart(li, 0);
     range.collapse(true);
-    let selection: Selection = window.getSelection();
+    let selection: Selection = window.getSelection()!;
     selection.removeAllRanges();
     selection.addRange(range);
   }
@@ -139,10 +139,10 @@ if (params.get("save") === "true") {
   if (localStorage) {
     use_local_storage = true;
   }
-  let stored_markdown: string = localStorage.getItem("markdown");
+  let stored_markdown = localStorage.getItem("markdown");
   if (stored_markdown) {
     let extra_lines: string[] = stored_markdown.split("\n");
-    (editor.children[0] as HTMLElement).innerText = extra_lines.shift();
+    (editor.children[0] as HTMLElement).innerText = extra_lines.shift()!;
     for (let i=0; i < extra_lines.length; i++) {
       let additional_line: HTMLElement =  document.createElement("LI");
       //needs to be .innerHTML so the html space entity can be parsed
@@ -153,12 +153,13 @@ if (params.get("save") === "true") {
   }
 }
 
-if (params.get("ignore")) {
+let ignore_param = params.get("ignore");
+if (ignore_param) {
   //allow user to specify warnings to ignore
-  if (params.get("ignore") === "all") {
+  if (ignore_param === "all") {
     ignore_all_warnings = true;
   } else {
-    ignore_warnings = params.get("ignore").split(",");
+    ignore_warnings = ignore_param.split(",");
   }
 }
 

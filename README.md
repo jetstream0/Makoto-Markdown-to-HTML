@@ -50,3 +50,6 @@ Some example CSS to style the HTML output can be found in `styles/makoto.css`.
 - `missing-image-alt`
 - `empty-link`
 - `weird-href`
+
+## Tests
+Makoto's test cases are in `index.ts`. The tests are decently thorough for everything except tables, so hopefully most edge cases were caught.
