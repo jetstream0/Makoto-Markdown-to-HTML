@@ -1,0 +1,22 @@
+{
+  "name": "makoto",
+  "version": "1.0.0",
+  "description": "Markdown to HTML parser",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jetstream0/Makoto-Markdown-to-HTML.git"
+  },
+  "keywords": [
+    "md",
+    "markdown",
+    "html"
+  ],
+  "author": "jetstream0/prussia",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/jetstream0/Makoto-Markdown-to-HTML/issues"
+  },
+  "homepage": "https://github.com/jetstream0/Makoto-Markdown-to-HTML#readme"
+}
