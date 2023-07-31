@@ -132,7 +132,7 @@ export function parse_md_to_html_with_warnings(md: string): ParseResult {
       }
       //if link was never completed
       if (link_content !== undefined) {
-        if (!html_line.startsWith("<p>")) {
+        if (!html_line.startsWith("<p>") && !in_unordered_list && !in_ordered_list) {
           html_line = "<p>"+html_line;
         }
         html_line += "["+link_content;
@@ -309,8 +309,8 @@ export function parse_md_to_html_with_warnings(md: string): ParseResult {
       if (char === "\n") {
         line_number++;
       }
-      //check to see if unordered list is ending
-      if (in_unordered_list && char === "\n" && ((chars.slice(i+1, i+3) !== "- " && !blockquote_list) || (chars.slice(i+1, i+5) !== "> - " && blockquote_list))) {
+      //check to see if unordered list is ending, and we are not on last char because then </ul> has already been added
+      if (in_unordered_list && i !== chars.length-1 && char === "\n" && ((chars.slice(i+1, i+3) !== "- " && !blockquote_list) || (chars.slice(i+1, i+5) !== "> - " && blockquote_list))) {
         html += "</ul>\n";
         in_unordered_list = false;
         blockquote_list = false;
