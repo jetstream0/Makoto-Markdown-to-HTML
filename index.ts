@@ -94,7 +94,9 @@ test_assert_equal(parse_md_to_html("> ```\n> alert('e')\n> ```"), "<blockquote>\
 
 test_assert_equal(parse_md_to_html("> a\n\n> b"), "<blockquote>\n<p>a</p>\n</blockquote>\n<blockquote>\n<p>b</p>\n</blockquote>", "block quote test 3");
 
-test_assert_equal(parse_md_to_html("> - burger\n> -winter melons\n> abcdefg\n> - fries\n- p**i**zza\na"), "<blockquote>\n<ul>\n<li>burger</li>\n</ul>\n<p>-winter melons</p>\n<p>abcdefg</p>\n<ul>\n<li>fries</li>\n</ul>\n</blockquote>\n<ul>\n<li>p<b>i</b>zza</li>\n</ul>\n<p>a</p>", "unordered lists test");
+test_assert_equal(parse_md_to_html("> - burger\n> -winter melons\n> abcdefg\n> - fries\n- p**i**zza\na"), "<blockquote>\n<ul>\n<li>burger</li>\n</ul>\n<p>-winter melons</p>\n<p>abcdefg</p>\n<ul>\n<li>fries</li>\n</ul>\n</blockquote>\n<ul>\n<li>p<b>i</b>zza</li>\n</ul>\n<p>a</p>", "unordered lists test 1");
+
+test_assert_equal(parse_md_to_html("- a**b**\n- cd\n- \[a]"), "<ul>\n<li>a<b>b</b></li>\n<li>cd</li>\n<li>[a]</li>\n</ul>", "unordered lists test 2");
 
 test_assert_equal(parse_md_to_html("1. a\n2. b\n3. c\n5. should *fail*\n> 1. d\n> 2. e\n3. should fail too"), "<ol>\n<li>a</li>\n<li>b</li>\n<li>c</li>\n</ol>\n<p>5. should <i>fail</i></p>\n<blockquote>\n<ol>\n<li>d</li>\n<li>e</li>\n</ol>\n</blockquote>\n<p>3. should fail too</p>", "ordered lists test 1")
 
