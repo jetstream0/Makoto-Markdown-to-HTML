@@ -5,6 +5,22 @@ export type ParseResult = {
   warnings: Warning[]
 }
 
+function replace_last_element(html_line: string, html_element: string, replace_string: string): string {
+  let split: string[] = html_line.split(html_element);
+  html_line = "";
+  for (let ii=0; ii < split.length; ii++) {
+    html_line += split[ii];
+    if (ii !== split.length-1) {
+      if (ii === split.length-2) {
+        html_line += replace_string;
+      } else {
+        html_line += html_element;
+      }
+    }
+  }
+  return html_line;
+}
+
 //some minor differences with markdown spec?
 export function parse_md_to_html_with_warnings(md: string): ParseResult {
   let html: string = "";
@@ -22,6 +38,8 @@ export function parse_md_to_html_with_warnings(md: string): ParseResult {
   let asterisk_num: number = 0;
   let asterisk_out_num: number = 0;
   let in_asterisk: boolean = false;
+  let tilde_num: number = 0;
+  let in_strikethrough: boolean = false;
   let horizontal_num: number = 0;
   let horizontal_rule: boolean = false;
   let was_image: boolean = false;
@@ -185,6 +203,16 @@ export function parse_md_to_html_with_warnings(md: string): ParseResult {
         if (chars[i-1] === "\n") {
           html_line = "<p>";
         }
+        //ending strikethrough
+        if (in_strikethrough && char === "~" && tilde_num === 1) {
+          in_strikethrough = false;
+          html_line += "</s>";
+          tilde_num = 0;
+          add_char = false;
+          //
+        } else if (tilde_num === 1) {
+          html_line += "~";
+        }
         //ending a bold/italic?
         if (in_asterisk && char === "*") {
           if (asterisk_num === 2 && chars[i-1] === "*") {
@@ -209,22 +237,22 @@ export function parse_md_to_html_with_warnings(md: string): ParseResult {
           html_line += char;
         }
       }
+      if (in_strikethrough) {
+        //strikethrough never ended
+        //remove the last <s> and replace it with a ~~
+        in_strikethrough = false;
+        html_line = replace_last_element(html_line, "<s>", "~~");
+        warnings.push({
+          type: "strikethrough-not-closed",
+          message: "Strikethrough not closed, may be missing closing '~~'? Backslash the '~'s if this is intentional",
+          line_number,
+        });
+      }
       if (in_asterisk) {
         //bold/italic never ended
         if (asterisk_num === 1) {
           //remove the last <i> and replace it with a *
-          let split: string[] = html_line.split("<i>");
-          html_line = "";
-          for (let ii=0; ii < split.length; ii++) {
-            html_line += split[ii];
-            if (ii !== split.length-1) {
-              if (ii === split.length-2) {
-                html_line += "*";
-              } else {
-                html_line += "<i>";
-              }
-            }
-          }
+          html_line = replace_last_element(html_line, "<i>", "*");
           warnings.push({
             type: "italic-not-closed",
             message: "Italic not closed, may be missing closing '*'? Backslash the '*' if this is intentional",
@@ -232,18 +260,7 @@ export function parse_md_to_html_with_warnings(md: string): ParseResult {
           });
         } else if (asterisk_num === 2) {
           //remove the last <b> and replace it with a **
-          let split: string[] = html_line.split("<b>");
-          html_line = "";
-          for (let ii=0; ii < split.length; ii++) {
-            html_line += split[ii];
-            if (ii !== split.length-1) {
-              if (ii === split.length-2) {
-                html_line += "**";
-              } else {
-                html_line += "<b>";
-              }
-            }
-          }
+          html_line = replace_last_element(html_line, "<b>", "**");
           warnings.push({
             type: "bold-not-closed",
             message: "Bold not closed, may be missing closing '**'? Backslash the '**' if this is intentional",
@@ -706,6 +723,50 @@ export function parse_md_to_html_with_warnings(md: string): ParseResult {
     //add beginning paragraph
     if (i === 0 || chars[i-1] === "\n") {
       html_line = "<p>"+html_line;
+    }
+    //handle strikethrough
+    if (char === "~") {
+      tilde_num++;
+      if (tilde_num === 2) {
+        if (in_strikethrough) {
+          //end strikethrough
+          html_line += "</s>";
+          in_strikethrough = false;
+          //end italics and bolds if not ended
+          if (in_asterisk) {
+            //bold/italic never ended
+            if (asterisk_num === 1) {
+              //remove the last <i> and replace it with a *
+              html_line = replace_last_element(html_line, "<i>", "*");
+              warnings.push({
+                type: "italic-not-closed",
+                message: "Italic not closed, may be missing closing '*'? Backslash the '*' if this is intentional",
+                line_number,
+              });
+            } else if (asterisk_num === 2) {
+              //remove the last <b> and replace it with a **
+              html_line = replace_last_element(html_line, "<b>", "**");
+              warnings.push({
+                type: "bold-not-closed",
+                message: "Bold not closed, may be missing closing '**'? Backslash the '**' if this is intentional",
+                line_number,
+              });
+            }
+            asterisk_num = 0;
+            asterisk_out_num = 0;
+            in_asterisk = false;
+          }
+        } else {
+          //start strikethrough
+          html_line += "<s>";
+          in_strikethrough = true;
+        }
+        tilde_num = 0;
+      }
+      continue;
+    } else if (tilde_num > 0) {
+      html_line += "~".repeat(tilde_num);
+      tilde_num = 0;
     }
     //handle italics and bolds
     if (char === "*" && asterisk_num < 2 && !in_asterisk) {

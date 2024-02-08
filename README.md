@@ -40,6 +40,7 @@ Some example CSS to style the HTML output can be found in `styles/makoto.css`.
 - `italic-not-closed`
 - `bold-not-closed`
 - `superscript-not-closed`
+- `strikethrough-not-closed`
 - `blockquote-broken`
 - `code-block-not-closed`
 - `unordered-list-broken`

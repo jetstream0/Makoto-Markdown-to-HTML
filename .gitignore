@@ -1,4 +1,2 @@
 *.js
 tsconfig.json
-tsconfig-node.json
-tsconfig-web.json

@@ -1,0 +1,22 @@
+{
+	"compilerOptions": {
+		"target": "esnext",
+		"module": "esnext",
+		"strict": true,
+		"moduleResolution": "classic",
+		"typeRoots": [
+			"./node_modules/@types",
+		],
+		"esModuleInterop": true,
+		"skipLibCheck": true,
+		"forceConsistentCasingInFileNames": true
+	},
+	"lib": [
+		"ESNext",
+		"DOM"
+	],
+	"exclude": [
+		"node_modules",
+		".build"
+	]
+}

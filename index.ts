@@ -104,6 +104,8 @@ test_assert_equal(parse_md_to_html("1. uno\n2. dos\n3. tres\n4. cuatro\n5. cinco
 
 test_assert_equal(parse_md_to_html("a ^ace^ base\n```js\n^sup^\n```\ne=mc^2\n^ea^"), "<p>a <sup>ace</sup> base</p>\n<div class=\"code-block code-js\">\n^sup^<br>\n</div>\n<p>e=mc^2</p>\n<p><sup>ea</sup></p>", "superscript test");
 
+test_assert_equal(parse_md_to_html("~~asdf~~ testing ~~is this thing on?~~ this will not be ~~struck through\n~~wee\n~~**a a a**\n~~*aloha~~*"), "<p><s>asdf</s> testing <s>is this thing on?</s> this will not be ~~struck through</p>\n<p>~~wee</p>\n<p>~~<b>a a a</b></p>\n<p><s>*aloha</s>*</p>", "strikethrough test");
+
 //I don't care about table edgecases.
 test_assert_equal(parse_md_to_html("|a|b|c|\n|d|e|f|\n# a"), "<table>\n<tr>\n<th>a</th>\n<th>b</th>\n<th>c</th>\n</tr>\n<tr>\n<td>d</td>\n<td>e</td>\n<td>f</td>\n</tr>\n</table>\n<h1 id=\"header-0\">a</h1>", "basic table test");
 
